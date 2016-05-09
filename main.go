@@ -7,6 +7,8 @@ import (
     "encoding/json"
     "bytes"
     "flag"
+    "strings"
+    "time"
 )
 
 type response struct {
@@ -16,8 +18,6 @@ type response struct {
 
 type attachReq struct {
     Password    string              `json:"password"`
-    Name        string              `json:"name"`
-    Callback    string              `json:"callback"`
     Data        map[string]string   `json:"data"`
 }
 
@@ -25,27 +25,16 @@ type attachRes struct {
     response    
 }
 
+type broadcastMsg struct {
+    Password    string              `json:"password"`
+    Data        map[string]string   `json:"data"`
+}
+
 var (
     pass string
     port int
     kv = make(map[string]string)
-    containers = make(map[string]string)
 ) 
-
-func init() {
-    flag.StringVar(&pass, "pass", "qpwoeiruty", "Create password")
-    flag.IntVar(&port, "port", 3000, "Specify port")
-    flag.Parse()
-    fmt.Println("Running on port: ", port)
-}
-
-func main() {
-    http.HandleFunc("/attach", handleAttach)
-    err := http.ListenAndServe(fmt.Sprintf(":%v", port), nil)
-    if err != nil {
-        log.Fatal("ListenAndServe: ", err)
-    }
-}
 
 func handleAttach(w http.ResponseWriter, r *http.Request) {
     var (
@@ -61,16 +50,15 @@ func handleAttach(w http.ResponseWriter, r *http.Request) {
         res.Status = "error"
         res.Message = "Wrong password"
     } else {
-        if req.Callback != "" {
-            containers[req.Name] = req.Callback
-            res.Message = fmt.Sprintf("Container (%v: %v) appended as observer", req.Name, req.Callback)
-        }
+        res.Message = ""
         for k, v := range req.Data {
             kv[string(k)] = string(v)
+            if strings.Index(k, "subscriber:") == 0 {
+                res.Message = fmt.Sprintf("%v /n %v@%v appended as subscriber", res.Message, k, v)
+            }
         } 
         res.Status = "success"
-        data, _ := json.Marshal(kv)
-        go broadcast(data)
+        go broadcast(kv)
     }
     json, err := json.Marshal(res)
     if err != nil {
@@ -79,9 +67,21 @@ func handleAttach(w http.ResponseWriter, r *http.Request) {
     w.Write(json)
 }
 
-func broadcast(store []byte) {
-    for _, url := range containers {
-        req, _ := http.NewRequest("POST", url, bytes.NewBuffer(store))
+func broadcast(store map[string]string) {
+    time.Sleep(1*time.Second)
+    msg := broadcastMsg{
+        Data: store,
+        Password: pass,
+    }
+    msg_json, _ := json.Marshal(msg)
+    subscribers := []string{}
+    for k, v := range kv {
+        if strings.Index(k, "subscriber:") == 0 {
+            subscribers = append(subscribers, v)  
+        } 
+    }
+    for _, url := range subscribers {
+        req, _ := http.NewRequest("POST", url, bytes.NewBuffer(msg_json))
         req.Header.Set("Content-Type", "application/json")
         client := &http.Client{}
         resp, err := client.Do(req)
@@ -92,11 +92,17 @@ func broadcast(store []byte) {
     }
 }
 
-func stringInSlice(a string, list []string) bool {
-    for _, b := range list {
-        if b == a {
-            return true
-        }
+func init() {
+    flag.StringVar(&pass, "pass", "testpass", "Create password")
+    flag.IntVar(&port, "port", 3000, "Specify port")
+    flag.Parse()
+    fmt.Println("Running on port: ", port)
+}
+
+func main() {
+    http.HandleFunc("/attach", handleAttach)
+    err := http.ListenAndServe(fmt.Sprintf(":%v", port), nil)
+    if err != nil {
+        log.Fatal("ListenAndServe: ", err)
     }
-    return false
 }
