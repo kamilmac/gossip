@@ -73,7 +73,7 @@ func broadcast(store map[string]string) {
         Data: store,
         Password: pass,
     }
-    msg_json, _ := json.Marshal(msg)
+    msgJSON, _ := json.Marshal(msg)
     subscribers := []string{}
     for k, v := range kv {
         if strings.Index(k, "subscriber:") == 0 {
@@ -81,7 +81,7 @@ func broadcast(store map[string]string) {
         } 
     }
     for _, url := range subscribers {
-        req, _ := http.NewRequest("POST", url, bytes.NewBuffer(msg_json))
+        req, _ := http.NewRequest("POST", url, bytes.NewBuffer(msgJSON))
         req.Header.Set("Content-Type", "application/json")
         client := &http.Client{}
         resp, err := client.Do(req)
@@ -100,7 +100,7 @@ func init() {
 }
 
 func main() {
-    http.HandleFunc("/attach", handleAttach)
+    http.HandleFunc("/set", handleAttach)
     err := http.ListenAndServe(fmt.Sprintf(":%v", port), nil)
     if err != nil {
         log.Fatal("ListenAndServe: ", err)
