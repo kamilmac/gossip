@@ -45,32 +45,35 @@ func handleAttach(w http.ResponseWriter, r *http.Request) {
         res attachRes
         req attachReq
     )
+    res.Status = "error"
+    defer func() {
+        json, err := json.Marshal(res)
+        if err != nil {
+            log.Println(err)
+        }
+        w.Write(json)
+    }()
     decoder := json.NewDecoder(r.Body)
     err := decoder.Decode(&req)
     if err != nil {
-        res.Status = "error"
         res.Message = "Json req decoding error"
-    } else if req.Password != pass {
-        res.Status = "error"
+        return
+    }
+    if req.Password != pass {
         res.Message = "Wrong password"
-    } else {
-        res.Message = ""
-        for k, v := range req.Data {
-            kv[string(k)] = string(v)
-        } 
-        res.Status = "success"
-        deadSubscribers := handshake(kv)
-        log.Println("Handshake done. Dead subscribers: ", deadSubscribers)
-        kv = removeDeadSubscribers(kv, deadSubscribers)
-        log.Println("Dead subscribers removed")
-        broadcast(kv)
-        log.Println("Broadcast done")
+        return
     }
-    json, err := json.Marshal(res)
-    if err != nil {
-        log.Println(err)
+    for k, v := range req.Data {
+        kv[string(k)] = string(v)
     }
-    w.Write(json)
+    deadSubscribers := handshake(kv)
+    log.Println("Handshake done. Dead subscribers: ", deadSubscribers)
+    kv = removeDeadSubscribers(kv, deadSubscribers)
+    log.Println("Dead subscribers removed")
+    broadcast(kv)
+    log.Println("Broadcast done")
+    res.Status = "success"
+    res.Message = "Broadcast done"
 }
 
 func handshake(store map[string]string) map[string]string {
@@ -172,7 +175,7 @@ func init() {
 }
 
 func main() {
-    http.HandleFunc("/set", handleAttach)
+    http.HandleFunc("/attach", handleAttach)
     err := http.ListenAndServe(fmt.Sprintf(":%v", port), nil)
     if err != nil {
         log.Fatal("ListenAndServe: ", err)
